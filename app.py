@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image
 from io import BytesIO
 
-# Configurações iniciais
+
 st.set_page_config(page_title="Catálogo de Produtos", page_icon="📦")
 
 
