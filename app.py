@@ -15,13 +15,11 @@ from supabase import create_client, Client
 
 # Configurações do Supabase
 
-SUPABASE_URL = st.secrets.supabase.SUPABASE_URL
-SUPABASE_KEY = st.secrets.supabase.SUPABASE_KEY
-BUCKET_NAME = st.secrets.supabase.BUCKET_NAME
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase_url = st.secrets.supabase.supabase_url
+supabase_key = st.secrets.supabase.supabase_key
+bucket_name = st.secrets.supabase.bucket_name
 
-# Inicializar cliente Supabase
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(supabase_url, supabase_key)
 
 st.set_page_config(page_title="Catálogo de Produtos", page_icon="📦")
 
