@@ -70,14 +70,14 @@ def upload_image(image_file, product_id):
         file_path = f"{product_id}.{file_extension}"
 
         # Upload para o Supabase Storage (sintaxe oficial mais recente)
-        res = supabase.storage.from_(BUCKET_NAME).upload(
+        res = supabase.storage.from_(bucket_name).upload(
             path=file_path,
             file=image_file.getvalue(),
             file_options={"content-type": image_file.type}  # Nome correto do parâmetro
         )
 
         # Obter URL pública
-        return supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
+        return supabase.storage.from_(bucket_name).get_public_url(file_path)
     except Exception as e:
         st.error(f"Erro no upload da imagem: {str(e)}")
         return None
@@ -302,7 +302,7 @@ elif page == "Ver Produtos Cadastrados":
                                     # Excluir imagem do Storage
                                     if product['image_url']:
                                         file_path = product['image_url'].split('/')[-1]
-                                        supabase.storage.from_(BUCKET_NAME).remove([file_path])
+                                        supabase.storage.from_(bucket_name).remove([file_path])
 
                                     st.success("Produto excluído com sucesso!")
                                     del st.session_state['product_to_delete']
