@@ -5,3 +5,4 @@ numpy
 pyzbar
 Pillow
 pandas
+supabase
