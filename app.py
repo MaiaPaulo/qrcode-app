@@ -14,6 +14,7 @@ from supabase import create_client, Client
 
 
 # Configurações do Supabase
+
 SUPABASE_URL = st.secrets.supabase.SUPABASE_URL
 SUPABASE_KEY = st.secrets.supabase.SUPABASE_KEY
 BUCKET_NAME = st.secrets.supabase.BUCKET_NAME
