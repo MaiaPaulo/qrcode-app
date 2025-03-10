@@ -16,9 +16,10 @@ from os import environ
 
 # Configurações do Supabase
 load_dotenv()
-SUPABASE_URL = environ['SUPABASE_URL']
-SUPABASE_KEY = environ['SUPABASE_KEY']
-BUCKET_NAME = environ['BUCKET_NAME']
+SUPABASE_URL = st.secrets.supabase.SUPABASE_URL
+SUPABASE_KEY = st.secrets.supabase.SUPABASE_KEY
+BUCKET_NAME = st.secrets.supabase.BUCKET_NAME
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Inicializar cliente Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
