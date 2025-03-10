@@ -11,11 +11,9 @@ import pandas as pd
 import numpy as np
 from io import BytesIO
 from supabase import create_client, Client
-from dotenv import load_dotenv
-from os import environ
+
 
 # Configurações do Supabase
-load_dotenv()
 SUPABASE_URL = st.secrets.supabase.SUPABASE_URL
 SUPABASE_KEY = st.secrets.supabase.SUPABASE_KEY
 BUCKET_NAME = st.secrets.supabase.BUCKET_NAME
