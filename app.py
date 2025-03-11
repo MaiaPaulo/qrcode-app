@@ -301,7 +301,7 @@ elif page == "Ver Produtos Cadastrados":
 
                                     # Excluir imagem do Storage
                                     if product['image_url']:
-                                        file_path = product['image_url'].split('/')[-1]
+                                        file_path = product['image_url'].split('/')[-1].split('?')[0]#.split('/')[-1]
                                         supabase.storage.from_(bucket_name).remove([file_path])
 
                                     st.success("Produto excluído com sucesso!")
