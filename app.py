@@ -30,14 +30,15 @@ def init_db():
     pass
 
 
-def insert_product(product_id, name, description, creation_date, image_url):
+def insert_product(product_id, name, description, creation_date, image_url, qr_code_url):
     try:
         response = supabase.table('products').insert({
             "id": product_id,
             "name": name,
             "description": description,
             "creation_date": creation_date,
-            "image_url": image_url
+            "image_url": image_url,
+            "qr_code_url": qr_code_url  # Nova coluna
         }).execute()
         return response
     except Exception as e:
@@ -83,6 +84,21 @@ def upload_image(image_file, product_id):
         return None
 
 
+# Função para upload do QR Code
+def upload_qr_code(qr_bytes, product_id):
+    try:
+        file_path = f"{product_id}_qrcode.png"
+        res = supabase.storage.from_(bucket_name).upload(
+            path=file_path,
+            file=qr_bytes,
+            file_options={"content-type": "image/png"}
+        )
+        return supabase.storage.from_(bucket_name).get_public_url(file_path)
+    except Exception as e:
+        st.error(f"Erro no upload do QR code: {str(e)}")
+        return None
+
+
 # Interface principal
 st.sidebar.title("Navegação")
 page = st.sidebar.radio("Selecione a página:", ["Gerar QR Code", "Ler QR Code", "Ver Produtos Cadastrados"])
@@ -113,17 +129,21 @@ if page == "Gerar QR Code":
                 image_url = upload_image(image_file, product_id)
 
                 if image_url:
-                    insert_product(product_id, name, description, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                   image_url)
-
                     # Geração do QR Code
                     qr = qrcode.make(product_id)
                     img_buffer = BytesIO()
                     qr.save(img_buffer, format="PNG")
-                    st.session_state.qr_bytes = img_buffer.getvalue()
-                    st.session_state.product_name = name
-                    st.session_state.generated = True
-                    st.success("✅ Produto cadastrado com sucesso!")
+                    qr_bytes = img_buffer.getvalue()
+                    qr_code_url = upload_qr_code(qr_bytes, product_id)
+
+                    if qr_code_url:
+                        insert_product(product_id, name, description, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                       image_url, qr_code_url)
+
+                        st.session_state.qr_bytes = qr_bytes
+                        st.session_state.product_name = name
+                        st.session_state.generated = True
+                        st.success("✅ Produto cadastrado com sucesso!")
 
     # Botão de download FORA do formulário
     if st.session_state.generated:
@@ -261,7 +281,8 @@ elif page == "Ver Produtos Cadastrados":
 
         # Exibir em formato de tabela
         with st.expander("Ver tabela completa"):
-            df = pd.DataFrame(products, columns=["ID", "Nome", "Descrição", "Data Criação", "Imagem URL"])
+            df = pd.DataFrame(products,
+                              columns=["ID", "Nome", "Descrição", "Data Criação", "Imagem URL", "QR Code URL"])
             st.dataframe(df[["Nome", "Descrição", "Data Criação"]], use_container_width=True)
 
         # Exibir detalhes de cada produto
@@ -282,6 +303,22 @@ elif page == "Ver Produtos Cadastrados":
                         f"Cadastrado em: {datetime.strptime(product['creation_date'], '%Y-%m-%dT%H:%M:%S').strftime('%d/%m/%Y %H:%M')}")
 
                 with col3:
+                    # Botão de Download do QR Code
+                    if product.get('qr_code_url'):
+                        try:
+                            qr_file_path = f"{product['id']}_qrcode.png"
+                            qr_data = supabase.storage.from_(bucket_name).download(qr_file_path)
+
+                            st.download_button(
+                                label="⬇️ QR Code",
+                                data=qr_data,
+                                file_name=f"qr_{product['name']}.png",
+                                mime="image/png",
+                                key=f"qr_{product['id']}"
+                            )
+                        except Exception as e:
+                            st.error(f"Erro ao baixar QR Code: {str(e)}")
+
                     # Botão de exclusão
                     delete_key = f"del_{product['id']}"
                     if st.button("🗑️ Excluir", key=delete_key, type="secondary"):
@@ -301,8 +338,9 @@ elif page == "Ver Produtos Cadastrados":
 
                                     # Excluir imagem do Storage
                                     if product['image_url']:
-                                        file_path = product['image_url'].split('/')[-1].split('?')[0]#.split('/')[-1]
-                                        supabase.storage.from_(bucket_name).remove([file_path])
+                                        file_path_image = product['image_url'].split('/')[-1].split('?')[0]
+                                        file_path_qr = f"{product['id']}_qrcode.png"
+                                        supabase.storage.from_(bucket_name).remove([file_path_image, file_path_qr])
 
                                     st.success("Produto excluído com sucesso!")
                                     del st.session_state['product_to_delete']
