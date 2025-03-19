@@ -266,7 +266,7 @@ elif page == "Ler QR Code":
                         R$ {product.get('price', 0):.2f}
 
                         **Data de Cadastro:**  
-                        {datetime.strptime(product['creation_date'], '%Y-%m-%dT%H:%M:%S').strftime('%d/%m/%Y %H:%M')}
+                        {datetime.fromisoformat(product['creation_date'].replace('Z', '+00:00')).strftime('%d/%m/%Y %H:%M')}
 
                         **ID Único:**  
                         `{product_id}`
@@ -326,7 +326,7 @@ elif page == "Ver Produtos Cadastrados":
                             f"R$ {product.get('price', 0):.2f}" if product.get('price') else "Não informado",
                             help="Valor em Reais")
                     st.caption(
-                        f"Cadastrado em: {datetime.fromisoformat(product['creation_date'].replace('Z', '+00:00')).strftime('%d/%m/%Y %H:%M')}")
+                        f"Cadastrado em: {datetime.fromisoformat(product['creation_date'].replace('Z', '')).strftime('%d/%m/%Y %H:%M')}")
 
                 with col3:
                     if product.get('qr_code_url'):
