@@ -34,19 +34,15 @@ CATEGORIAS = {
 
 st.set_page_config(page_title="Catálogo de Produtos", page_icon="📦")
 
-
 # Funções do Banco de Dados
-def init_db():
-    pass
-
-
-def insert_product(product_id, category, name, description, creation_date, image_url, qr_code_url):
+def insert_product(product_id, category, name, description, price, creation_date, image_url, qr_code_url):
     try:
         response = supabase.table('products').insert({
             "id": product_id,
             "category": category,
             "name": name,
             "description": description,
+            "price": price,
             "creation_date": creation_date,
             "image_url": image_url,
             "qr_code_url": qr_code_url
@@ -56,7 +52,6 @@ def insert_product(product_id, category, name, description, creation_date, image
         st.error(f"Erro ao inserir produto: {str(e)}")
         return None
 
-
 def get_product(product_id):
     try:
         response = supabase.table('products').select("*").eq("id", product_id).execute()
@@ -65,7 +60,6 @@ def get_product(product_id):
         st.error(f"Erro ao buscar produto: {str(e)}")
         return None
 
-
 def get_all_products():
     try:
         response = supabase.table('products').select("*").order("creation_date", desc=True).execute()
@@ -73,7 +67,6 @@ def get_all_products():
     except Exception as e:
         st.error(f"Erro ao buscar produtos: {str(e)}")
         return []
-
 
 # Funções de Upload
 def upload_image(image_file, product_id):
@@ -91,7 +84,6 @@ def upload_image(image_file, product_id):
         st.error(f"Erro no upload da imagem: {str(e)}")
         return None
 
-
 def upload_qr_code(qr_bytes, product_id):
     try:
         file_path = f"{product_id}_qrcode.png"
@@ -104,7 +96,6 @@ def upload_qr_code(qr_bytes, product_id):
     except Exception as e:
         st.error(f"Erro no upload do QR code: {str(e)}")
         return None
-
 
 # Interface Principal
 st.sidebar.title("Navegação")
@@ -127,11 +118,17 @@ if page == "Gerar QR Code":
         )
         name = st.text_input("Nome do Produto*", max_chars=50)
         description = st.text_area("Descrição do Produto", height=100)
+        price = st.number_input(
+            "Valor do Produto (R$)*",
+            min_value=0.0,
+            format="%.2f",
+            step=0.01
+        )
         image_file = st.file_uploader("Upload da Imagem do Produto*", type=['jpg', 'jpeg', 'png'])
         submitted = st.form_submit_button("Gerar QR Code")
 
         if submitted:
-            if not name or not image_file or not category:
+            if not name or not image_file or not category or price is None:
                 st.error("Preencha todos os campos obrigatórios (*)")
                 st.session_state.generated = False
             else:
@@ -163,6 +160,7 @@ if page == "Gerar QR Code":
                                 category=category,
                                 name=name,
                                 description=description,
+                                price=float(price),
                                 creation_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 image_url=image_url,
                                 qr_code_url=qr_code_url
@@ -190,7 +188,6 @@ elif page == "Ler QR Code":
     detected_data = None
     scan_method = st.radio("Escolha o método de leitura:", ["Usar Câmera", "Upload de Imagem"])
 
-
     def decode_qr(image):
         try:
             if image.dtype == bool:
@@ -210,7 +207,6 @@ elif page == "Ler QR Code":
         except Exception as e:
             st.error(f"Erro no processamento: {str(e)}")
             return None
-
 
     if scan_method == "Usar Câmera":
         camera_image = st.camera_input("Aponte a câmera para o QR Code")
@@ -266,6 +262,9 @@ elif page == "Ler QR Code":
                         **Descrição:**  
                         {product['description'] or 'Sem descrição'}
 
+                        **Valor:**  
+                        R$ {product.get('price', 0):.2f}
+
                         **Data de Cadastro:**  
                         {datetime.strptime(product['creation_date'], '%Y-%m-%dT%H:%M:%S').strftime('%d/%m/%Y %H:%M')}
 
@@ -304,9 +303,10 @@ elif page == "Ver Produtos Cadastrados":
 
         with st.expander("Ver tabela completa"):
             df = pd.DataFrame(products,
-                              columns=["id", "category", "name", "description", "creation_date", "image_url",
-                                       "qr_code_url"])
-            st.dataframe(df[["category", "name", "description", "creation_date"]], use_container_width=True)
+                            columns=["id", "category", "name", "description", "price",
+                                    "creation_date", "image_url", "qr_code_url"])
+            st.dataframe(df[["category", "name", "description", "price", "creation_date"]],
+                       use_container_width=True)
 
         for product in products:
             with st.container():
@@ -322,6 +322,9 @@ elif page == "Ver Produtos Cadastrados":
                     st.subheader(product['name'])
                     st.caption(f"Categoria: {product['category'].upper()}")
                     st.write(product['description'] or "Sem descrição")
+                    st.metric("Valor",
+                            f"R$ {product.get('price', 0):.2f}" if product.get('price') else "Não informado",
+                            help="Valor em Reais")
                     st.caption(
                         f"Cadastrado em: {datetime.fromisoformat(product['creation_date'].replace('Z', '+00:00')).strftime('%d/%m/%Y %H:%M')}")
 
