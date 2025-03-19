@@ -21,24 +21,35 @@ bucket_name = st.secrets.supabase.bucket_name
 
 supabase: Client = create_client(supabase_url, supabase_key)
 
+# Configuração de categorias
+CATEGORIAS = {
+    "nexthub": 100001,
+    "nextonline": 150001,
+    "nextevents": 200001,
+    "federação": 250001,
+    "nexttech": 300001,
+    "nextmedia": 350001,
+    "nexteducation": 400001
+}
+
 st.set_page_config(page_title="Catálogo de Produtos", page_icon="📦")
 
 
 # Funções do Banco de Dados
 def init_db():
-    # A tabela será criada manualmente no painel do Supabase
     pass
 
 
-def insert_product(product_id, name, description, creation_date, image_url, qr_code_url):
+def insert_product(product_id, category, name, description, creation_date, image_url, qr_code_url):
     try:
         response = supabase.table('products').insert({
             "id": product_id,
+            "category": category,
             "name": name,
             "description": description,
             "creation_date": creation_date,
             "image_url": image_url,
-            "qr_code_url": qr_code_url  # Nova coluna
+            "qr_code_url": qr_code_url
         }).execute()
         return response
     except Exception as e:
@@ -64,27 +75,23 @@ def get_all_products():
         return []
 
 
-# Função para upload de imagens
+# Funções de Upload
 def upload_image(image_file, product_id):
     try:
         file_extension = image_file.name.split('.')[-1]
         file_path = f"{product_id}.{file_extension}"
 
-        # Upload para o Supabase Storage (sintaxe oficial mais recente)
         res = supabase.storage.from_(bucket_name).upload(
             path=file_path,
             file=image_file.getvalue(),
-            file_options={"content-type": image_file.type}  # Nome correto do parâmetro
+            file_options={"content-type": image_file.type}
         )
-
-        # Obter URL pública
         return supabase.storage.from_(bucket_name).get_public_url(file_path)
     except Exception as e:
         st.error(f"Erro no upload da imagem: {str(e)}")
         return None
 
 
-# Função para upload do QR Code
 def upload_qr_code(qr_bytes, product_id):
     try:
         file_path = f"{product_id}_qrcode.png"
@@ -99,14 +106,13 @@ def upload_qr_code(qr_bytes, product_id):
         return None
 
 
-# Interface principal
+# Interface Principal
 st.sidebar.title("Navegação")
 page = st.sidebar.radio("Selecione a página:", ["Gerar QR Code", "Ler QR Code", "Ver Produtos Cadastrados"])
 
 if page == "Gerar QR Code":
     st.title("📷 Gerador de QR Code para Produtos")
 
-    # Inicialização do Session State
     if 'generated' not in st.session_state:
         st.session_state.generated = False
         st.session_state.qr_bytes = None
@@ -114,38 +120,62 @@ if page == "Gerar QR Code":
         st.session_state.image_url = ""
 
     with st.form("product_form"):
+        category = st.selectbox(
+            "Categoria do Produto*",
+            options=list(CATEGORIAS.keys()),
+            index=0
+        )
         name = st.text_input("Nome do Produto*", max_chars=50)
         description = st.text_area("Descrição do Produto", height=100)
         image_file = st.file_uploader("Upload da Imagem do Produto*", type=['jpg', 'jpeg', 'png'])
         submitted = st.form_submit_button("Gerar QR Code")
 
         if submitted:
-            if not name or not image_file:
+            if not name or not image_file or not category:
                 st.error("Preencha todos os campos obrigatórios (*)")
                 st.session_state.generated = False
             else:
-                # Lógica de cadastro e geração do QR Code
-                product_id = str(uuid.uuid4())
-                image_url = upload_image(image_file, product_id)
+                try:
+                    # Obter último ID da categoria
+                    response = supabase.table('products') \
+                        .select('id') \
+                        .eq('category', category) \
+                        .order('id', desc=True) \
+                        .limit(1) \
+                        .execute()
 
-                if image_url:
-                    # Geração do QR Code
-                    qr = qrcode.make(product_id)
-                    img_buffer = BytesIO()
-                    qr.save(img_buffer, format="PNG")
-                    qr_bytes = img_buffer.getvalue()
-                    qr_code_url = upload_qr_code(qr_bytes, product_id)
+                    last_id = response.data[0]['id'] if response.data else None
+                    next_id = last_id + 1 if last_id else CATEGORIAS[category]
 
-                    if qr_code_url:
-                        insert_product(product_id, name, description, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                       image_url, qr_code_url)
+                    product_id = next_id
+                    image_url = upload_image(image_file, product_id)
 
-                        st.session_state.qr_bytes = qr_bytes
-                        st.session_state.product_name = name
-                        st.session_state.generated = True
-                        st.success("✅ Produto cadastrado com sucesso!")
+                    if image_url:
+                        qr = qrcode.make(str(product_id))
+                        img_buffer = BytesIO()
+                        qr.save(img_buffer, format="PNG")
+                        qr_bytes = img_buffer.getvalue()
+                        qr_code_url = upload_qr_code(qr_bytes, product_id)
 
-    # Botão de download FORA do formulário
+                        if qr_code_url:
+                            insert_product(
+                                product_id=product_id,
+                                category=category,
+                                name=name,
+                                description=description,
+                                creation_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                image_url=image_url,
+                                qr_code_url=qr_code_url
+                            )
+
+                            st.session_state.qr_bytes = qr_bytes
+                            st.session_state.product_name = name
+                            st.session_state.generated = True
+                            st.success("✅ Produto cadastrado com sucesso!")
+
+                except Exception as e:
+                    st.error(f"Erro ao gerar ID do produto: {str(e)}")
+
     if st.session_state.generated:
         st.download_button(
             label="Baixar QR Code",
@@ -154,32 +184,25 @@ if page == "Gerar QR Code":
             mime="image/png"
         )
 
-# Seção de leitura mantém a mesma lógica, modificando apenas o acesso à imagem
 elif page == "Ler QR Code":
     st.title("🔍 Leitor de QR Code")
 
-    # Inicialização da variável
     detected_data = None
     scan_method = st.radio("Escolha o método de leitura:", ["Usar Câmera", "Upload de Imagem"])
 
 
-    # Função de decodificação
     def decode_qr(image):
         try:
-            # Converter para array numpy uint8
             if image.dtype == bool:
                 image = image.astype(np.uint8) * 255
 
-            # Converter para escala de cinza se necessário
             if len(image.shape) == 3:
                 image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
-            # Primeiro tentar com pyzbar
             decoded_objects = decode(image)
             if decoded_objects:
                 return decoded_objects[0].data.decode('utf-8')
 
-            # Se falhar, tentar com OpenCV
             detector = cv2.QRCodeDetector()
             data, _, _ = detector.detectAndDecode(image)
             return data if data else None
@@ -189,7 +212,6 @@ elif page == "Ler QR Code":
             return None
 
 
-    # Lógica de leitura por câmera
     if scan_method == "Usar Câmera":
         camera_image = st.camera_input("Aponte a câmera para o QR Code")
         if camera_image:
@@ -199,8 +221,6 @@ elif page == "Ler QR Code":
             except Exception as e:
                 st.error(f"Erro na leitura: {str(e)}")
                 detected_data = None
-
-    # Lógica de leitura por upload
     else:
         uploaded_file = st.file_uploader("Carregue uma imagem com QR Code", type=['jpg', 'jpeg', 'png'])
         if uploaded_file:
@@ -211,29 +231,24 @@ elif page == "Ler QR Code":
                 st.error(f"Erro na leitura: {str(e)}")
                 detected_data = None
 
-    # Exibição dos resultados
     if detected_data:
         try:
-            product_id = detected_data.strip()
+            product_id = int(detected_data.strip())
             product = get_product(product_id)
 
             if product:
                 st.success("✅ QR Code detectado com sucesso!")
                 st.subheader("📋 Detalhes do Produto")
 
-                # Layout em colunas
                 col1, col2 = st.columns([1, 2])
 
                 with col1:
-                    # Exibir imagem do produto
                     st.image(
                         product['image_url'],
                         caption="Foto do Produto",
                         use_container_width=True
                     )
-
-                    # Gerar QR Code para exibição
-                    qr_img = qrcode.make(product_id)
+                    qr_img = qrcode.make(str(product_id))
                     st.image(
                         np.array(qr_img.convert("RGB")),
                         caption="QR Code do Produto",
@@ -241,8 +256,10 @@ elif page == "Ler QR Code":
                     )
 
                 with col2:
-                    # Exibir detalhes textuais
                     st.markdown(f"""
+                        **Categoria:**  
+                        {product['category'].upper()}
+
                         **Nome do Produto:**  
                         {product['name']}
 
@@ -255,7 +272,6 @@ elif page == "Ler QR Code":
                         **ID Único:**  
                         `{product_id}`
                         """)
-                    # Botão para copiar ID
                     if st.button("📋 Copiar ID"):
                         st.session_state.clipboard = product_id
                         st.toast("ID copiado para a área de transferência!")
@@ -268,24 +284,30 @@ elif page == "Ler QR Code":
             st.error(f"Erro ao carregar dados: {str(e)}")
             st.write("Detalhes técnicos:", detected_data)
 
-# Seção de visualização de produtos
 elif page == "Ver Produtos Cadastrados":
     st.title("📦 Produtos Cadastrados")
 
+    selected_category = st.selectbox(
+        "Filtrar por categoria:",
+        options=["Todas"] + list(CATEGORIAS.keys())
+    )
+
     products = get_all_products()
+
+    if selected_category != "Todas":
+        products = [p for p in products if p['category'] == selected_category]
 
     if not products:
         st.info("Nenhum produto cadastrado ainda.")
     else:
         st.subheader(f"Total de produtos: {len(products)}")
 
-        # Exibir em formato de tabela
         with st.expander("Ver tabela completa"):
             df = pd.DataFrame(products,
-                              columns=["ID", "Nome", "Descrição", "Data Criação", "Imagem URL", "QR Code URL"])
-            st.dataframe(df[["Nome", "Descrição", "Data Criação"]], use_container_width=True)
+                              columns=["id", "category", "name", "description", "creation_date", "image_url",
+                                       "qr_code_url"])
+            st.dataframe(df[["category", "name", "description", "creation_date"]], use_container_width=True)
 
-        # Exibir detalhes de cada produto
         for product in products:
             with st.container():
                 col1, col2, col3 = st.columns([1, 3, 1])
@@ -298,12 +320,12 @@ elif page == "Ver Produtos Cadastrados":
 
                 with col2:
                     st.subheader(product['name'])
+                    st.caption(f"Categoria: {product['category'].upper()}")
                     st.write(product['description'] or "Sem descrição")
                     st.caption(
-                        f"Cadastrado em: {datetime.strptime(product['creation_date'], '%Y-%m-%dT%H:%M:%S').strftime('%d/%m/%Y %H:%M')}")
+                        f"Cadastrado em: {datetime.fromisoformat(product['creation_date'].replace('Z', '+00:00')).strftime('%d/%m/%Y %H:%M')}")
 
                 with col3:
-                    # Botão de Download do QR Code
                     if product.get('qr_code_url'):
                         try:
                             qr_file_path = f"{product['id']}_qrcode.png"
@@ -319,12 +341,10 @@ elif page == "Ver Produtos Cadastrados":
                         except Exception as e:
                             st.error(f"Erro ao baixar QR Code: {str(e)}")
 
-                    # Botão de exclusão
                     delete_key = f"del_{product['id']}"
                     if st.button("🗑️ Excluir", key=delete_key, type="secondary"):
                         st.session_state['product_to_delete'] = product['id']
 
-                    # Confirmação de exclusão
                     if 'product_to_delete' in st.session_state and st.session_state['product_to_delete'] == product[
                         'id']:
                         st.warning("Tem certeza que deseja excluir este produto permanentemente?")
@@ -333,10 +353,8 @@ elif page == "Ver Produtos Cadastrados":
                         with col_confirm:
                             if st.button("✅ Confirmar Exclusão", key=f"confirm_{product['id']}"):
                                 try:
-                                    # Excluir do banco de dados
                                     supabase.table('products').delete().eq('id', product['id']).execute()
 
-                                    # Excluir imagem do Storage
                                     if product['image_url']:
                                         file_path_image = product['image_url'].split('/')[-1].split('?')[0]
                                         file_path_qr = f"{product['id']}_qrcode.png"
